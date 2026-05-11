@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SEPA Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111418;
+    --surface2: #181d23;
+    --border: #1e252e;
+    --border2: #2a3340;
+    --text: #e8edf2;
+    --text2: #8a96a3;
+    --text3: #4a5560;
+    --green: #00d084;
+    --green-dim: #00d08422;
+    --green-mid: #00d08444;
+    --red: #ff4757;
+    --red-dim: #ff475722;
+    --amber: #ffb300;
+    --amber-dim: #ffb30022;
+    --blue: #4da6ff;
+    --blue-dim: #4da6ff18;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* Top bar */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 32px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(10,12,15,0.95);
+    backdrop-filter: blur(8px);
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .logo-text {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--text);
+  }
+
+  .logo-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.05em;
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .last-update {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  .refresh-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--green);
+    background: var(--green-dim);
+    border: 1px solid var(--green-mid);
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: all 0.15s;
+  }
+
+  .refresh-btn:hover { background: var(--green-mid); }
+  .refresh-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* API Key setup */
+  .setup-panel {
+    margin: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 28px 32px;
+  }
+
+  .setup-title {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--amber);
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+
+  .setup-desc {
+    font-size: 13px;
+    color: var(--text2);
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  .setup-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .api-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    padding: 9px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .api-input:focus { border-color: var(--blue); }
+  .api-input::placeholder { color: var(--text3); }
+
+  .save-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: #0a0c0f;
+    background: var(--blue);
+    border: none;
+    padding: 9px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+  }
+
+  .save-btn:hover { opacity: 0.85; }
+
+  /* Main content */
+  .main { padding: 24px 32px 48px; }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 10px 0;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text3);
+  }
+
+  .status-dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+
+  /* Section header */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    color: var(--text3);
+    text-transform: uppercase;
+  }
+
+  .section-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Stock grid */
+  .stock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .stock-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.15s;
+    cursor: pointer;
+  }
+
+  .stock-card:hover {
+    border-color: var(--border2);
+    transform: translateY(-1px);
+  }
+
+  .stock-card.strong { border-left: 3px solid var(--green); }
+  .stock-card.watch { border-left: 3px solid var(--amber); }
+  .stock-card.pass { border-left: 3px solid var(--red); }
+
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ticker-wrap {}
+
+  .ticker-sym {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.05em;
+  }
+
+  .ticker-name {
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 2px;
+  }
+
+  .card-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+
+  .badge-strong { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-mid); }
+  .badge-watch { background: var(--amber-dim); color: var(--amber); border: 1px solid #ffb30044; }
+  .badge-pass { background: var(--red-dim); color: var(--red); border: 1px solid #ff475744; }
+
+  .card-body { padding: 14px 16px; }
+
+  .price-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .price-chip {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 7px 10px;
+    text-align: center;
+  }
+
+  .price-chip-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 0.08em;
+    margin-bottom: 3px;
+  }
+
+  .price-chip-val {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .price-chip-val.green { color: var(--green); }
+  .price-chip-val.red { color: var(--red); }
+  .price-chip-val.amber { color: var(--amber); }
+
+  .analysis-text {
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.65;
+    margin-bottom: 12px;
+  }
+
+  .checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+    line-height: 1.4;
+  }
+
+  .chk { flex-shrink: 0; font-size: 11px; margin-top: 1px; }
+  .chk.ok { color: var(--green); }
+  .chk.warn { color: var(--amber); }
+  .chk.fail { color: var(--red); }
+
+  .risk-note {
+    background: #ffb30010;
+    border: 1px solid #ffb30022;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: #ffb300aa;
+    line-height: 1.5;
+  }
+
+  /* Loading state */
+  .loading-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 320px;
+    gap: 16px;
+  }
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+  }
+
+  /* Stream output */
+  .stream-log {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 20px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    line-height: 1.8;
+    margin-bottom: 24px;
+    max-height: 120px;
+    overflow-y: auto;
+    display: none;
+  }
+
+  .stream-log.visible { display: block; }
+
+  /* Market overview bar */
+  .market-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+
+  .market-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .market-chip-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+  }
+
+  .market-chip-val {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* Footer */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-text {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.05em;
+    line-height: 1.8;
+  }
+
+  /* Skeleton loader */
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface) 0%, var(--surface2) 50%, var(--surface) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+  }
+
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  .skeleton-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    height: 280px;
+  }
+
+  /* Error */
+  .error-box {
+    background: var(--red-dim);
+    border: 1px solid #ff475733;
+    border-radius: 6px;
+    padding: 16px 20px;
+    font-size: 13px;
+    color: var(--red);
+    margin-bottom: 20px;
+  }
+
+  /* Responsive */
+  @media (max-width: 680px) {
+    .topbar { padding: 12px 16px; }
+    .main { padding: 16px; }
+    .market-bar { grid-template-columns: 1fr 1fr; }
+    .stock-grid { grid-template-columns: 1fr; }
+    .setup-panel { margin: 16px; padding: 20px; }
+  }
+
+  /* Ticker pulse animation on new data */
+  @keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(0,208,132,0.4); }
+    70% { box-shadow: 0 0 0 8px rgba(0,208,132,0); }
+    100% { box-shadow: 0 0 0 0 rgba(0,208,132,0); }
+  }
+
+  .fresh { animation: pulse-green 1s ease-out; }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="logo">
+    <span class="logo-text">SEPA//MONITOR</span>
+    <span class="logo-sub">Minervini Strategy Dashboard</span>
+  </div>
+  <div class="topbar-right">
+    <span class="last-update" id="lastUpdate">— never updated —</span>
+    <button class="refresh-btn" id="refreshBtn" onclick="runAnalysis()">⟳ REFRESH</button>
+  </div>
+</div>
+
+<!-- API Setup Panel -->
+<div class="setup-panel" id="setupPanel">
+  <div class="setup-title">// API KEY REQUIRED</div>
+  <div class="setup-desc">
+    Enter your Anthropic API key to power the SEPA analysis. The key is stored locally in your browser and never sent anywhere except directly to Anthropic's API.<br>
+    Get your key at <strong style="color:var(--blue)">console.anthropic.com</strong>
+  </div>
+  <div class="setup-row">
+    <input class="api-input" type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." spellcheck="false" />
+    <button class="save-btn" onclick="saveApiKey()">SAVE KEY</button>
+  </div>
+</div>
+
+<!-- Main Dashboard -->
+<div class="main" id="mainDash" style="display:none">
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="status-item">
+      <div class="status-dot green" id="apiDot"></div>
+      <span id="apiStatus">API connected</span>
+    </div>
+    <div class="status-item">
+      <div class="status-dot" id="marketDot"></div>
+      <span id="marketStatus">Market status loading...</span>
+    </div>
+    <div class="status-item" style="margin-left:auto">
+      <span style="font-family:var(--mono);font-size:11px;color:var(--text3)" id="dateLabel"></span>
+    </div>
+  </div>
+
+  <!-- Stream Log -->
+  <div class="stream-log" id="streamLog"></div>
+
+  <!-- Error Box -->
+  <div class="error-box" id="errorBox" style="display:none"></div>
+
+  <!-- Market Overview -->
+  <div class="section-header">
+    <span class="section-label">Market Env</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="market-bar" id="marketBar">
+    <div class="market-chip skeleton" style="height:52px"></div>
+    <div class="market-chip skeleton" style="height:52px"></div>
+    <div class="market-chip skeleton" style="height:52px"></div>
+    <div class="market-chip skeleton" style="height:52px"></div>
+  </div>
+
+  <!-- Stocks -->
+  <div class="section-header">
+    <span class="section-label">SEPA Watchlist — 5 Candidates</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="stock-grid" id="stockGrid">
+    <div class="skeleton-card skeleton"></div>
+    <div class="skeleton-card skeleton"></div>
+    <div class="skeleton-card skeleton"></div>
+    <div class="skeleton-card skeleton"></div>
+    <div class="skeleton-card skeleton"></div>
+  </div>
+
+  <!-- Summary -->
+  <div class="section-header">
+    <span class="section-label">Daily Commentary</span>
+    <div class="section-line"></div>
+  </div>
+  <div id="summaryBox" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 24px;font-size:13px;color:var(--text2);line-height:1.8;min-height:80px;">
+    <span style="color:var(--text3);font-family:var(--mono);font-size:11px">// waiting for analysis...</span>
+  </div>
+
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <div class="footer-text">
+    SEPA MONITOR · powered by Claude claude-sonnet-4-20250514<br>
+    Data via Anthropic API · Educational use only — not investment advice
+  </div>
+  <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">
+    <span style="cursor:pointer;color:var(--red)" onclick="clearKey()">[ clear api key ]</span>
+  </div>
+</div>
+
+<script>
+const TICKERS = ['NVDA','MRVL','AVGO','PLTR','MU'];
+const TODAY = new Date().toLocaleDateString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'});
+
+function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key.startsWith('sk-ant')) {
+    alert('请输入有效的 Anthropic API Key（以 sk-ant 开头）');
+    return;
+  }
+  localStorage.setItem('sepa_api_key', key);
+  document.getElementById('setupPanel').style.display = 'none';
+  document.getElementById('mainDash').style.display = 'block';
+  document.getElementById('dateLabel').textContent = TODAY;
+  runAnalysis();
+}
+
+function clearKey() {
+  if (confirm('确认清除 API Key？')) {
+    localStorage.removeItem('sepa_api_key');
+    localStorage.removeItem('sepa_cache');
+    location.reload();
+  }
+}
+
+function getKey() { return localStorage.getItem('sepa_api_key'); }
+
+function log(msg) {
+  const el = document.getElementById('streamLog');
+  el.classList.add('visible');
+  el.innerHTML += `<span style="color:var(--text3)">// </span>${msg}<br>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setMarketStatus(env) {
+  const dot = document.getElementById('marketDot');
+  const txt = document.getElementById('marketStatus');
+  if (env === 'bull') {
+    dot.className = 'status-dot green';
+    txt.textContent = 'Market: BULL — full position sizing';
+  } else if (env === 'choppy') {
+    dot.className = 'status-dot amber';
+    txt.textContent = 'Market: CHOPPY — reduce sizing';
+  } else {
+    dot.className = 'status-dot';
+    dot.style.background = 'var(--red)';
+    txt.textContent = 'Market: BEAR — stay in cash';
+  }
+}
+
+function renderMarket(data) {
+  const bar = document.getElementById('marketBar');
+  const items = [
+    { label: 'ENVIRONMENT', val: data.environment || '—', cls: data.environment === 'bull' ? 'green' : data.environment === 'choppy' ? 'amber' : 'red' },
+    { label: 'S&P 500 vs 200MA', val: data.sp500 || '—', cls: 'green' },
+    { label: 'NASDAQ vs 200MA', val: data.nasdaq || '—', cls: 'green' },
+    { label: 'RISK PER TRADE', val: data.riskPerTrade || '1-2%', cls: 'amber' },
+  ];
+  bar.innerHTML = items.map(it => `
+    <div class="market-chip">
+      <span class="market-chip-name">${it.label}</span>
+      <span class="market-chip-val ${it.cls}">${it.val}</span>
+    </div>
+  `).join('');
+  setMarketStatus(data.environment);
+}
+
+function renderStocks(stocks) {
+  const grid = document.getElementById('stockGrid');
+  grid.innerHTML = stocks.map(s => {
+    const cls = s.verdict === 'STRONG BUY' ? 'strong' : s.verdict === 'WATCH' ? 'watch' : 'pass';
+    const badgeCls = cls === 'strong' ? 'badge-strong' : cls === 'watch' ? 'badge-watch' : 'badge-pass';
+    const checks = (s.checks || []).map(c => {
+      const icon = c.pass === true ? '<span class="chk ok">✓</span>' : c.pass === false ? '<span class="chk fail">✗</span>' : '<span class="chk warn">⚠</span>';
+      return `<div class="check-item">${icon}<span>${c.text}</span></div>`;
+    }).join('');
+
+    return `
+    <div class="stock-card ${cls} fresh">
+      <div class="card-top">
+        <div class="ticker-wrap">
+          <div class="ticker-sym">${s.ticker}</div>
+          <div class="ticker-name">${s.name || ''} · ${s.sector || ''}</div>
+        </div>
+        <span class="card-badge ${badgeCls}">${s.verdict || '—'}</span>
+      </div>
+      <div class="card-body">
+        <div class="price-row">
+          <div class="price-chip">
+            <div class="price-chip-label">PRICE</div>
+            <div class="price-chip-val">${s.price || '—'}</div>
+          </div>
+          <div class="price-chip">
+            <div class="price-chip-label">ENTRY ZONE</div>
+            <div class="price-chip-val ${cls === 'strong' ? 'green' : 'amber'}">${s.entry || '—'}</div>
+          </div>
+          <div class="price-chip">
+            <div class="price-chip-label">STOP LOSS</div>
+            <div class="price-chip-val red">${s.stop || '—'}</div>
+          </div>
+        </div>
+        <div class="checklist">${checks}</div>
+        <div class="analysis-text">${s.analysis || ''}</div>
+        ${s.risk ? `<div class="risk-note">⚠ ${s.risk}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderSummary(text) {
+  document.getElementById('summaryBox').innerHTML = `<div style="white-space:pre-wrap">${text}</div>`;
+}
+
+// PASTE YOUR CLOUDFLARE WORKER URL BELOW after deploying worker.js
+const PROXY_URL = 'https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev';
+
+async function callClaude(prompt) {
+  const key = getKey();
+  if (!key) throw new Error('No API key found — please re-enter your key.');
+
+  if (PROXY_URL.includes('YOUR-WORKER-NAME')) {
+    throw new Error('Worker URL not configured. Follow the Cloudflare Worker setup steps and paste your worker URL into the PROXY_URL line in index.html.');
+  }
+
+  let res;
+  try {
+    res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 3000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+  } catch(networkErr) {
+    throw new Error('Cannot reach proxy worker. Check your worker URL is correct and the worker is deployed. Detail: ' + networkErr.message);
+  }
+
+  if (!res.ok) {
+    let errMsg = 'API error ' + res.status;
+    try {
+      const err = await res.json();
+      errMsg = err.error?.message || errMsg;
+    } catch(e) {}
+    if (res.status === 401) throw new Error('Invalid API key — click [ clear api key ] below and re-enter.');
+    throw new Error(errMsg);
+  }
+
+  const data = await res.json();
+  return data.content[0].text;
+}
+
+async function runAnalysis() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = '⟳ RUNNING...';
+  document.getElementById('errorBox').style.display = 'none';
+  document.getElementById('streamLog').innerHTML = '';
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // Check cache (valid for same calendar day)
+  const cached = localStorage.getItem('sepa_cache');
+  if (cached) {
+    try {
+      const c = JSON.parse(cached);
+      if (c.date === today) {
+        log('Using cached data from today');
+        renderMarket(c.market);
+        renderStocks(c.stocks);
+        renderSummary(c.summary);
+        document.getElementById('lastUpdate').textContent = `Updated: ${c.time}`;
+        btn.disabled = false;
+        btn.textContent = '⟳ REFRESH';
+        return;
+      }
+    } catch(e) {}
+  }
+
+  try {
+    log(`Requesting SEPA analysis for ${today}...`);
+
+    const prompt = `You are a SEPA (Specific Entry Point Analysis) expert following Mark Minervini's methodology. Today is ${today}.
+
+Analyze these 5 stocks: NVDA, MRVL, AVGO, PLTR, MU.
+
+For each stock, based on your knowledge of their recent price action, fundamentals, and SEPA trend template, provide a structured analysis.
+
+Respond ONLY with a valid JSON object in this exact format (no markdown, no explanation, just the JSON):
+{
+  "market": {
+    "environment": "bull",
+    "sp500": "above 200MA",
+    "nasdaq": "above 200MA",
+    "riskPerTrade": "1-2%"
+  },
+  "stocks": [
+    {
+      "ticker": "NVDA",
+      "name": "Nvidia",
+      "sector": "AI Chips",
+      "price": "$217",
+      "verdict": "STRONG BUY",
+      "entry": "$220-231",
+      "stop": "$203",
+      "checks": [
+        {"pass": true, "text": "Price > 50MA > 150MA > 200MA"},
+        {"pass": true, "text": "200MA trending up"},
+        {"pass": true, "text": "+89% from 52w low"},
+        {"pass": true, "text": "Near 52w high (< -5%)"},
+        {"pass": null, "text": "VCP contraction in progress"}
+      ],
+      "analysis": "2-3 sentence analysis of current setup and what to watch for today.",
+      "risk": "Key risk to watch for this stock."
+    }
+  ],
+  "summary": "A 3-4 sentence daily market commentary covering overall environment, which setups are most actionable today, and what to watch.",
+  "generatedAt": "${today}"
+}
+
+Important: Use the most current data you have. If a stock does not pass the SEPA trend template, verdict should be "WATCH" or "PASS". Verdict must be one of: "STRONG BUY", "WATCH", "PASS".`;
+
+    log('Calling Claude claude-sonnet-4-20250514...');
+    const raw = await callClaude(prompt);
+    log('Response received, parsing...');
+
+    let parsed;
+    try {
+      // Strip any markdown fences if present
+      const clean = raw.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      throw new Error('Failed to parse JSON response: ' + e.message);
+    }
+
+    const now = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
+    const cacheObj = {
+      date: today,
+      time: now,
+      market: parsed.market,
+      stocks: parsed.stocks,
+      summary: parsed.summary
+    };
+    localStorage.setItem('sepa_cache', JSON.stringify(cacheObj));
+
+    renderMarket(parsed.market);
+    renderStocks(parsed.stocks);
+    renderSummary(parsed.summary);
+    document.getElementById('lastUpdate').textContent = `Updated: ${now}`;
+    document.getElementById('streamLog').classList.remove('visible');
+    log('Done ✓');
+
+  } catch(err) {
+    const box = document.getElementById('errorBox');
+    box.style.display = 'block';
+    box.textContent = '// ERROR: ' + err.message;
+    log('Error: ' + err.message);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '⟳ REFRESH';
+}
+
+// Init on load
+window.onload = () => {
+  const key = getKey();
+  document.getElementById('dateLabel').textContent = TODAY;
+
+  if (key) {
+    document.getElementById('setupPanel').style.display = 'none';
+    document.getElementById('mainDash').style.display = 'block';
+    runAnalysis();
+  } else {
+    document.getElementById('mainDash').style.display = 'block';
+  }
+};
+</script>
+</body>
+</html>
