@@ -682,34 +682,12 @@ function renderMarket(data) {
 
 // Fetch real-time price data from Yahoo Finance via allorigins proxy
 async function fetchRealPrices() {
-  const results = {};
-  await Promise.all(TICKERS.map(async ticker => {
-    try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
-      const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-      const res = await fetch(proxy);
-      const parsed = await res.json();
-      const meta = parsed.chart.result[0].meta;
-      const quotes = parsed.chart.result[0].indicators.quote[0];
-      const closes = parsed.chart.result[0].timestamps.map((t, i) => quotes.close[i]).filter(v => v !== null);
-      const high52 = Math.max(...closes);
-      const low52 = Math.min(...closes);
-      const price = meta.regularMarketPrice;
-      const pctFromHigh = ((price - high52) / high52 * 100).toFixed(1);
-      const pctFromLow = ((price - low52) / low52 * 100).toFixed(1);
-      results[ticker] = {
-        price: price.toFixed(2),
-        high52: high52.toFixed(2),
-        low52: low52.toFixed(2),
-        pctFromHigh,
-        pctFromLow,
-        change: meta.regularMarketChangePercent ? meta.regularMarketChangePercent.toFixed(2) : '0.00'
-      };
-    } catch(e) {
-      results[ticker] = null;
-    }
-  }));
-  return results;
+  try {
+    const res = await fetch('https://shinchannn--b91fae084d5311f1b7a5ee650bb23af1.web.val.run/prices');
+    return await res.json();
+  } catch(e) {
+    return {};
+  }
 }
 
 function renderStocks(stocks, prices) {
