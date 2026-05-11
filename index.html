@@ -615,11 +615,12 @@
 <script>
 const TICKERS = ['NVDA','MRVL','AVGO','PLTR','MU'];
 const TODAY = new Date().toLocaleDateString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'});
+const PROXY_URL = 'https://shinchannn--b91fae084d5311f1b7a5ee650bb23af1.web.val.run';
 
 function saveApiKey() {
   const key = document.getElementById('apiKeyInput').value.trim();
   if (!key.startsWith('sk-ant')) {
-    alert('请输入有效的 Anthropic API Key（以 sk-ant 开头）');
+    alert('Please enter a valid Anthropic API Key (starting with sk-ant)');
     return;
   }
   localStorage.setItem('sepa_api_key', key);
@@ -630,7 +631,7 @@ function saveApiKey() {
 }
 
 function clearKey() {
-  if (confirm('确认清除 API Key？')) {
+  if (confirm('Clear API Key?')) {
     localStorage.removeItem('sepa_api_key');
     localStorage.removeItem('sepa_cache');
     location.reload();
@@ -679,7 +680,40 @@ function renderMarket(data) {
   setMarketStatus(data.environment);
 }
 
-function renderStocks(stocks) {
+// Fetch real-time price data from Yahoo Finance via allorigins proxy
+async function fetchRealPrices() {
+  const results = {};
+  await Promise.all(TICKERS.map(async ticker => {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
+      const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+      const res = await fetch(proxy);
+      const data = await res.json();
+      const parsed = JSON.parse(data.contents);
+      const meta = parsed.chart.result[0].meta;
+      const quotes = parsed.chart.result[0].indicators.quote[0];
+      const closes = parsed.chart.result[0].timestamps.map((t, i) => quotes.close[i]).filter(v => v !== null);
+      const high52 = Math.max(...closes);
+      const low52 = Math.min(...closes);
+      const price = meta.regularMarketPrice;
+      const pctFromHigh = ((price - high52) / high52 * 100).toFixed(1);
+      const pctFromLow = ((price - low52) / low52 * 100).toFixed(1);
+      results[ticker] = {
+        price: price.toFixed(2),
+        high52: high52.toFixed(2),
+        low52: low52.toFixed(2),
+        pctFromHigh,
+        pctFromLow,
+        change: meta.regularMarketChangePercent ? meta.regularMarketChangePercent.toFixed(2) : '0.00'
+      };
+    } catch(e) {
+      results[ticker] = null;
+    }
+  }));
+  return results;
+}
+
+function renderStocks(stocks, prices) {
   const grid = document.getElementById('stockGrid');
   grid.innerHTML = stocks.map(s => {
     const cls = s.verdict === 'STRONG BUY' ? 'strong' : s.verdict === 'WATCH' ? 'watch' : 'pass';
@@ -689,11 +723,20 @@ function renderStocks(stocks) {
       return `<div class="check-item">${icon}<span>${c.text}</span></div>`;
     }).join('');
 
+    const p = prices && prices[s.ticker];
+    const livePrice = p ? `$${p.price}` : s.price || '—';
+    const changeCls = p && parseFloat(p.change) >= 0 ? 'green' : 'red';
+    const changeStr = p ? `<span class="price-chip-val ${changeCls}" style="font-size:11px">${parseFloat(p.change) >= 0 ? '+' : ''}${p.change}%</span>` : '';
+    const high52str = p ? `52W H: $${p.high52}` : '';
+    const low52str = p ? `52W L: $${p.low52}` : '';
+    const fromHighStr = p ? `${p.pctFromHigh}% from high` : '';
+    const fromLowStr = p ? `+${p.pctFromLow}% from low` : '';
+
     return `
     <div class="stock-card ${cls} fresh">
       <div class="card-top">
         <div class="ticker-wrap">
-          <div class="ticker-sym">${s.ticker}</div>
+          <div class="ticker-sym">${s.ticker} ${changeStr}</div>
           <div class="ticker-name">${s.name || ''} · ${s.sector || ''}</div>
         </div>
         <span class="card-badge ${badgeCls}">${s.verdict || '—'}</span>
@@ -701,8 +744,8 @@ function renderStocks(stocks) {
       <div class="card-body">
         <div class="price-row">
           <div class="price-chip">
-            <div class="price-chip-label">PRICE</div>
-            <div class="price-chip-val">${s.price || '—'}</div>
+            <div class="price-chip-label">LIVE PRICE</div>
+            <div class="price-chip-val green">${livePrice}</div>
           </div>
           <div class="price-chip">
             <div class="price-chip-label">ENTRY ZONE</div>
@@ -713,6 +756,11 @@ function renderStocks(stocks) {
             <div class="price-chip-val red">${s.stop || '—'}</div>
           </div>
         </div>
+        ${p ? `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-family:var(--mono);font-size:10px;color:var(--text3)">${high52str}<br><span style="color:var(--text2)">${fromHighStr}</span></div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-family:var(--mono);font-size:10px;color:var(--text3)">${low52str}<br><span style="color:var(--green)">${fromLowStr}</span></div>
+        </div>` : ''}
         <div class="checklist">${checks}</div>
         <div class="analysis-text">${s.analysis || ''}</div>
         ${s.risk ? `<div class="risk-note">⚠ ${s.risk}</div>` : ''}
@@ -725,16 +773,9 @@ function renderSummary(text) {
   document.getElementById('summaryBox').innerHTML = `<div style="white-space:pre-wrap">${text}</div>`;
 }
 
-// PASTE YOUR CLOUDFLARE WORKER URL BELOW after deploying worker.js
-const PROXY_URL = 'https://shinchannn--b91fae084d5311f1b7a5ee650bb23af1.web.val.run';
-
 async function callClaude(prompt) {
   const key = getKey();
   if (!key) throw new Error('No API key found — please re-enter your key.');
-
-  if (PROXY_URL.includes('YOUR-WORKER-NAME')) {
-    throw new Error('Worker URL not configured. Follow the Cloudflare Worker setup steps and paste your worker URL into the PROXY_URL line in index.html.');
-  }
 
   let res;
   try {
@@ -751,7 +792,7 @@ async function callClaude(prompt) {
       })
     });
   } catch(networkErr) {
-    throw new Error('Cannot reach proxy worker. Check your worker URL is correct and the worker is deployed. Detail: ' + networkErr.message);
+    throw new Error('Cannot reach proxy. Detail: ' + networkErr.message);
   }
 
   if (!res.ok) {
@@ -777,32 +818,45 @@ async function runAnalysis() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Check cache (valid for same calendar day)
   const cached = localStorage.getItem('sepa_cache');
   if (cached) {
     try {
       const c = JSON.parse(cached);
       if (c.date === today) {
-        log('Using cached data from today');
+        log('Using cached analysis from today');
+        log('Fetching live prices...');
+        const prices = await fetchRealPrices();
         renderMarket(c.market);
-        renderStocks(c.stocks);
+        renderStocks(c.stocks, prices);
         renderSummary(c.summary);
         document.getElementById('lastUpdate').textContent = `Updated: ${c.time}`;
         btn.disabled = false;
         btn.textContent = '⟳ REFRESH';
+        document.getElementById('streamLog').classList.remove('visible');
         return;
       }
     } catch(e) {}
   }
 
   try {
-    log(`Requesting SEPA analysis for ${today}...`);
+    log('Fetching live prices from Yahoo Finance...');
+    const prices = await fetchRealPrices();
+    log('Prices fetched ✓');
+
+    const priceContext = TICKERS.map(t => {
+      const p = prices[t];
+      if (!p) return `${t}: price unavailable`;
+      return `${t}: current $${p.price} (${parseFloat(p.change) >= 0 ? '+' : ''}${p.change}% today), 52w high $${p.high52} (${p.pctFromHigh}% from high), 52w low $${p.low52} (+${p.pctFromLow}% from low)`;
+    }).join('\n');
+
+    log('Requesting SEPA analysis from Claude...');
 
     const prompt = `You are a SEPA (Specific Entry Point Analysis) expert following Mark Minervini's methodology. Today is ${today}.
 
-Analyze these 5 stocks: NVDA, MRVL, AVGO, PLTR, MU.
+Here are the REAL-TIME prices for each stock:
+${priceContext}
 
-For each stock, based on your knowledge of their recent price action, fundamentals, and SEPA trend template, provide a structured analysis.
+Using these actual current prices, analyze these 5 stocks: NVDA, MRVL, AVGO, PLTR, MU.
 
 Respond ONLY with a valid JSON object in this exact format (no markdown, no explanation, just the JSON):
 {
@@ -817,56 +871,51 @@ Respond ONLY with a valid JSON object in this exact format (no markdown, no expl
       "ticker": "NVDA",
       "name": "Nvidia",
       "sector": "AI Chips",
-      "price": "$217",
+      "price": "$221",
       "verdict": "STRONG BUY",
-      "entry": "$220-231",
+      "entry": "$221-232",
       "stop": "$203",
       "checks": [
         {"pass": true, "text": "Price > 50MA > 150MA > 200MA"},
         {"pass": true, "text": "200MA trending up"},
-        {"pass": true, "text": "+89% from 52w low"},
-        {"pass": true, "text": "Near 52w high (< -5%)"},
+        {"pass": true, "text": "+XX% from 52w low"},
+        {"pass": true, "text": "Within XX% of 52w high"},
         {"pass": null, "text": "VCP contraction in progress"}
       ],
-      "analysis": "2-3 sentence analysis of current setup and what to watch for today.",
+      "analysis": "2-3 sentence analysis using the real price data provided.",
       "risk": "Key risk to watch for this stock."
     }
   ],
-  "summary": "A 3-4 sentence daily market commentary covering overall environment, which setups are most actionable today, and what to watch.",
+  "summary": "3-4 sentence daily market commentary using the real price data.",
   "generatedAt": "${today}"
 }
 
-Important: Use the most current data you have. If a stock does not pass the SEPA trend template, verdict should be "WATCH" or "PASS". Verdict must be one of: "STRONG BUY", "WATCH", "PASS".`;
+Use the real prices provided above. Verdict must be one of: STRONG BUY, WATCH, PASS.`;
 
-    log('Calling Claude claude-sonnet-4-20250514...');
     const raw = await callClaude(prompt);
-    log('Response received, parsing...');
+    log('Analysis received, parsing...');
 
     let parsed;
     try {
-      // Strip any markdown fences if present
-      const clean = raw.replace(/```json|```/g, '').trim();
+      const clean = raw.replace(/\`\`\`json|\`\`\`/g, '').trim();
       parsed = JSON.parse(clean);
     } catch(e) {
-      throw new Error('Failed to parse JSON response: ' + e.message);
+      throw new Error('Failed to parse JSON: ' + e.message);
     }
 
-    const now = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
-    const cacheObj = {
-      date: today,
-      time: now,
+    const now = new Date().toLocaleTimeString('en', {hour:'2-digit', minute:'2-digit'});
+    localStorage.setItem('sepa_cache', JSON.stringify({
+      date: today, time: now,
       market: parsed.market,
       stocks: parsed.stocks,
       summary: parsed.summary
-    };
-    localStorage.setItem('sepa_cache', JSON.stringify(cacheObj));
+    }));
 
     renderMarket(parsed.market);
-    renderStocks(parsed.stocks);
+    renderStocks(parsed.stocks, prices);
     renderSummary(parsed.summary);
     document.getElementById('lastUpdate').textContent = `Updated: ${now}`;
     document.getElementById('streamLog').classList.remove('visible');
-    log('Done ✓');
 
   } catch(err) {
     const box = document.getElementById('errorBox');
@@ -879,11 +928,9 @@ Important: Use the most current data you have. If a stock does not pass the SEPA
   btn.textContent = '⟳ REFRESH';
 }
 
-// Init on load
 window.onload = () => {
   const key = getKey();
   document.getElementById('dateLabel').textContent = TODAY;
-
   if (key) {
     document.getElementById('setupPanel').style.display = 'none';
     document.getElementById('mainDash').style.display = 'block';
