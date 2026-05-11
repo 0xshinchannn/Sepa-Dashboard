@@ -688,8 +688,7 @@ async function fetchRealPrices() {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
       const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`;
       const res = await fetch(proxy);
-      const data = await res.json();
-      const parsed = JSON.parse(data.contents);
+      const parsed = await res.json();
       const meta = parsed.chart.result[0].meta;
       const quotes = parsed.chart.result[0].indicators.quote[0];
       const closes = parsed.chart.result[0].timestamps.map((t, i) => quotes.close[i]).filter(v => v !== null);
